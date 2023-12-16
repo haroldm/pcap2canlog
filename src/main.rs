@@ -5,7 +5,7 @@ extern crate error_chain;
 mod errors {
     error_chain! {}
 }
-use byteorder::{LittleEndian, ReadBytesExt};
+use byteorder::{BigEndian, ReadBytesExt};
 use clap::{App, Arg};
 use errors::*;
 use pcap::Capture;
@@ -32,7 +32,7 @@ impl CanFrame {
     /// Decodes a CAN frame
     fn new(frame: &[u8]) -> Option<CanFrame> {
         let mut reader = Cursor::new(frame);
-        let id_ = reader.read_u32::<LittleEndian>().ok()?;
+        let id_ = reader.read_u32::<BigEndian>().ok()?;
         let id = id_ & ID_PART_MASK;
         let is_extended = ((id_ & EXTENDED_FLAG_MASK) >> 31) == 1;
         let datalen = reader.read_u8().ok()?;
@@ -47,7 +47,7 @@ impl CanFrame {
 
         for i in 0..datalen as usize {
             dataout[i] = reader.read_u8().ok()?;
-        }
+        }        
         Some(CanFrame {
             is_extended,
             id,
@@ -91,16 +91,7 @@ fn run() -> Result<()> {
         .chain_err(|| "invalid devname")?;
 
     while let Ok(packet) = cap.next() {
-        // slice protocol from packet
-        let protocol = &packet.data[14..16];
-        // check if it is a can packet, if not ignore it
-        if protocol != [0, 0xc] {
-            continue;
-        }
-
-        // split packet data from packet metadata
-        let packet_data = &packet.data[16..];
-        let frame = CanFrame::new(packet_data);
+        let frame = CanFrame::new(&packet);
         let frame = match frame {
             Some(f) => f,
             None => continue,
